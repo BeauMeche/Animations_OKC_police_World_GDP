@@ -1,1 +1,2 @@
-# Hartfort_CT_and_OKC_animations
+## Warning: this takes a few minutes to knit and/or run. 
+Included are two separate graphic projects, one from gapminder global data and the other from the Stanford Open Policing Project's OKC data. Animation is a personal work in progress, so it will get better over time. Eventually I will be appending another OKC plot that shows DUIs. The data set is quite extensive and was cumbersome for the first project. 
