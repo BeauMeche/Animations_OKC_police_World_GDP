@@ -1,0 +1,152 @@
+---
+title: "Oklahoma City Animation"
+author: "Beau Meche"
+date: "April 9, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readr)
+library(tidyverse)
+library(sf)
+library(fs)
+library(lubridate)
+library(gifski)
+library(png)
+library(dplyr)
+library(gt)
+library(ggplot2)
+library(maps)
+library(ggthemes)
+library(gganimate)
+library(forcats)
+library(gapminder)
+```
+
+## Oklahoma City Mapping
+
+```{r data_import_2, echo=FALSE, cache=TRUE}
+# new data getss imported to a new name, rds file comes straight in
+
+okc <- read_rds(url("https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ok_oklahoma_city_2019_02_25.rds"))
+
+# import the shape files and name them so you can get to them shortly
+
+download.file(url = "https://stacks.stanford.edu/file/druid:tr137st9964/tr137st9964_ok_oklahoma_city_shapefiles_2019_02_25.tgz", 
+              destfile = "shape_okc.tgz", quiet = TRUE)
+
+# remove the tar so that we can actually see what we are wanting to see (maps)
+
+untar("shape_okc.tgz")
+
+# assign the shape file and delete the rest of the clunky files that are taking
+# up space
+
+okc_shapes <- read_sf("ok_oklahoma_city_shapefiles/Police_Districts.shp")
+file_delete(c("shape_okc.tgz", "ok_oklahoma_city_shapefiles/"))
+```
+
+```{r okc_dynamic_map, echo=FALSE, warning=FALSE}
+
+# date range for accurate depiction to reader(s)
+
+date_min_okc <- okc %>% arrange(date) %>% slice(1) %>% pull(date) %>% format("%B %d, %Y")
+date_max_okc <- okc %>% arrange(desc(date)) %>% slice(1) %>% pull(date) %>% format("%B %d, %Y")
+
+city <- okc %>% 
+  
+  # I chose to map public indecency as a second choice to DUIs (too many points,
+  # I nearly fried my machine).
+  
+  filter(violation ==  "PUBLIC INDECENCY") %>% 
+  
+  # to map this information it mus tfirst exist
+  
+  filter(!is.na(lng) & !is.na(lat)) %>% 
+  
+  # as mentioned above, I approximated bounds for OKC via sketchy ckicking
+  # through google maps, so confidence interval is quite high here
+  
+  filter(lng <= -97.133452 & lng >= -97.835046) %>% 
+  filter(lat <= 35.674956 & lat >= 35.291712) %>% 
+  filter(!is.na(time)) %>% 
+  
+  # select relevant information, trying to figure out the animation bug
+  
+  select(lng, lat, violation, time, date, subject_sex)
+
+#prep for map format and signal location of GPS data
+
+city_2 <- st_as_sf(city, 
+                   coords = c("lng", "lat"),
+                   crs = 4326)
+
+# lay the shape file first as a base, at least this is how i remember the order
+
+ggplot(data = okc_shapes) +
+  
+  # map
+  
+  geom_sf() +
+  
+  # overlay the points of lewd sightings, differentiate by color, account fot
+  # overlays, and color by gender
+  
+  geom_sf(data = city_2, aes(color = city$subject_sex), show.legend = FALSE, alpha = .65) +
+  scale_color_manual(values = c("blue4", "deeppink4")) +
+  
+  theme_map() +
+  
+  # Beau - 5 : forgetting_to_cite&label - 0
+  
+  labs(title = "Public Indecency in Oklahoma City",
+       subtitle = "257 Incidents, Shown by Gender.",
+       caption = "Source: Stanford Open Policing Project" ) +
+  
+  #attempting to animate this thing figured it out, shadow_wake makes the points
+  #linger longer so you can observe trends without too much overlapping, wrap
+  #makes the resetting of the loop less visually obvious
+  
+  transition_states(date, 1,3) +
+  shadow_wake(1, wrap = TRUE)
+  
+```
+
+### World Per Capita G.D.P. 
+
+```{r make_plot, echo = FALSE, cache=TRUE}
+# Look at the subset of data from gapminder that we care about. Start with just
+# one year at the start to fix ideas. Show just three countries over time to get
+# at the intuition of the animation.
+
+gapminder %>%
+  
+  # Restrict to the data we want.
+  
+  mutate(continent = fct_collapse(continent, Asia = c("Asia", "Oceania"))) %>% 
+  filter(continent != "Europe") %>% 
+  
+  # Make a basic plot. Easiest way to get an animation working is toi get a
+  # pretty ggplot and then, at the end, add animation. Same advice applies to
+  # Shiny plots.
+  
+ ggplot(aes(x = gdpPercap, y = lifeExp, size = pop, color = country)) +
+     geom_point(alpha = 0.5, show.legend = FALSE) +
+  
+    # GDP is lognormally distributed (has fat tail) so we need to use a log axis
+    # to "stretch out" the data.
+  
+    scale_color_manual(values = country_colors) +
+    scale_x_log10(breaks = c(1000, 10000),
+                  labels = c("$1,000", "$10,000")) +
+    facet_grid(~continent) +
+    labs(x = "GDP Per Capita",
+         y = "Life Expectancy",
+         caption = "Source: gapminder package") +
+  
+  # Now that we have a good looking plot, we add a few key lines of animation.
+  
+  transition_time(year) +
+  labs(title = "The World Gets Better Every Year: {frame_time}")
+```
